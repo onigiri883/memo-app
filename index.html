@@ -95,6 +95,9 @@
     background: transparent;
     color: var(--muted);
     cursor: pointer;
+    margin-left: auto;
+    padding: 8px;
+    font-size: 16px;
   }
   .icon-btn:hover { background: #eef1f5; color: #444; }
   .icon-btn.danger:hover { color: var(--danger); background: #fdeeee; }
@@ -275,9 +278,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // タブの名前変更をタッチで行う
   function enableTabRenameOnTouch(tab, index, memo) {
-    tab.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      startEditTitle(tab, index, memo.title);
+    tab.addEventListener('touchend', (e) => {
+      if (!e.target.classList.contains('icon-btn')) {
+        startEditTitle(tab, index, memo.title);
+      }
     });
   }
 
