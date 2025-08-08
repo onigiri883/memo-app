@@ -273,6 +273,32 @@ document.addEventListener('DOMContentLoaded', () => {
     render();
   }
 
+  // タブの名前変更をタッチで行う
+  function enableTabRenameOnTouch(tab, index, memo) {
+    tab.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      startEditTitle(tab, index, memo.title);
+    });
+  }
+
+  // タブの入れ替えをスワイプで行う
+  function enableTabSwapOnSwipe(tab, index) {
+    let startX;
+    tab.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+    });
+    tab.addEventListener('touchmove', (e) => {
+      const moveX = e.touches[0].clientX;
+      if (startX && Math.abs(moveX - startX) > 50) {
+        const direction = moveX > startX ? 'right' : 'left';
+        const newIndex = direction === 'right' ? index + 1 : index - 1;
+        moveMemo(index, newIndex);
+        startX = null;
+      }
+    });
+  }
+
+  // タブのレンダリング時に新しいイベントを追加
   function renderTabs() {
     tabsEl.innerHTML = '';
     state.memos.forEach((memo, index) => {
@@ -280,17 +306,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.className = 'tab' + (index === state.selectedIndex ? ' active' : '');
       tab.setAttribute('draggable', 'true');
 
-      // label or editor
       const label = document.createElement('span');
       label.className = 'label';
       label.textContent = memo.title;
       label.title = memo.title;
-      label.oncontextmenu = (e) => {
-        e.preventDefault();
-        startEditTitle(tab, index, memo.title);
-      };
 
-      // delete button
       const del = document.createElement('button');
       del.className = 'icon-btn danger';
       del.innerHTML = '✕';
@@ -300,28 +320,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       tab.appendChild(label);
       tab.appendChild(del);
-
       tab.onclick = () => setSelected(index);
 
-      // DnD
-      tab.addEventListener('dragstart', (e) => {
-        dragSourceIndex = index;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(index));
-      });
-      tab.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        tab.classList.add('drag-over');
-      });
-      tab.addEventListener('dragleave', () => tab.classList.remove('drag-over'));
-      tab.addEventListener('drop', (e) => {
-        e.preventDefault();
-        tab.classList.remove('drag-over');
-        const src = dragSourceIndex ?? parseInt(e.dataTransfer.getData('text/plain') || '-1', 10);
-        if (!Number.isInteger(src) || src < 0) return;
-        moveMemo(src, index);
-        dragSourceIndex = null;
-      });
+      enableTabRenameOnTouch(tab, index, memo);
+      enableTabSwapOnSwipe(tab, index);
 
       tabsEl.appendChild(tab);
     });
