@@ -273,52 +273,18 @@ document.addEventListener('DOMContentLoaded', () => {
     state.memos.forEach((memo, index) => {
       const tab = document.createElement('div');
       tab.className = 'tab' + (index === state.selectedIndex ? ' active' : '');
-      tab.setAttribute('draggable', 'true');
-
+      // Remove draggable from tab itself
+      
       const handle = document.createElement('span');
       handle.className = 'drag-handle';
       handle.innerHTML = '&#9776;'; // Hamburger icon
       handle.style.cursor = 'grab';
+      handle.setAttribute('draggable', 'true'); // Only handle is draggable
 
       const label = document.createElement('span');
       label.className = 'label';
       label.textContent = memo.title;
       label.title = memo.title;
-
-      // --- Tab Rename on Long Press (for Mobile) ---
-      let pressTimer = null;
-      let touchMoved = false;
-
-      const startPress = (e) => {
-        // Don't trigger if handle or button was clicked
-        if (e.target === handle || e.target.closest('button')) {
-          return;
-        }
-        touchMoved = false;
-        pressTimer = setTimeout(() => {
-          if (!touchMoved) {
-            startEditTitle(tab, index, memo.title);
-          }
-        }, 500); // 500ms for long press
-      };
-
-      const cancelPress = () => {
-        clearTimeout(pressTimer);
-      };
-
-      const moved = () => {
-        touchMoved = true;
-        clearTimeout(pressTimer);
-      };
-
-      tab.addEventListener('touchstart', startPress, { passive: true });
-      tab.addEventListener('touchend', cancelPress);
-      tab.addEventListener('touchmove', moved, { passive: true });
-      tab.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        startEditTitle(tab, index, memo.title);
-      });
-      // --- End of Long Press Logic ---
 
       const del = document.createElement('button');
       del.className = 'icon-btn danger';
@@ -330,46 +296,70 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.appendChild(handle);
       tab.appendChild(label);
       tab.appendChild(del);
-      // --- Tap to switch ---
-      tab.addEventListener('click', (e) => {
-        if (e.target === handle || e.target.closest('button')) return;
-        setSelected(index);
-      });
 
-      // --- Double-tap / Double-click to rename ---
+      // --- Single Tap to Switch Tab ---
       let lastTapTime = 0;
-      tab.addEventListener('touchend', (e) => {
+      let tapCount = 0;
+      
+      tab.addEventListener('click', (e) => {
+        // Ignore clicks on handle or delete button
         if (e.target === handle || e.target.closest('button')) return;
+        
         const now = Date.now();
         if (now - lastTapTime < 350) {
-          // double tap
-          e.preventDefault();
-          startEditTitle(tab, index, memo.title);
+          tapCount++;
+        } else {
+          tapCount = 1;
         }
         lastTapTime = now;
+        
+        if (tapCount === 1) {
+          // Single tap - switch tab (delayed to check for double tap)
+          setTimeout(() => {
+            if (tapCount === 1) {
+              setSelected(index);
+            }
+          }, 350);
+        } else if (tapCount === 2) {
+          // Double tap - edit title
+          startEditTitle(tab, index, memo.title);
+          tapCount = 0; // Reset
+        }
       });
+
+      // --- Double Click for Desktop ---
       tab.addEventListener('dblclick', (e) => {
         if (e.target === handle || e.target.closest('button')) return;
         startEditTitle(tab, index, memo.title);
       });
 
-      // --- DnD Logic (drag by handle) ---
-      handle.setAttribute('draggable', 'true');
+      // --- Drag & Drop Logic (Handle Only) ---
       handle.addEventListener('dragstart', (e) => {
         dragSourceIndex = index;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(index));
+        tab.style.opacity = '0.5';
       });
+      
+      handle.addEventListener('dragend', () => {
+        tab.style.opacity = '1';
+      });
+      
       tab.addEventListener('dragover', (e) => {
         e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
         tab.classList.add('drag-over');
       });
-      tab.addEventListener('dragleave', () => tab.classList.remove('drag-over'));
+      
+      tab.addEventListener('dragleave', () => {
+        tab.classList.remove('drag-over');
+      });
+      
       tab.addEventListener('drop', (e) => {
         e.preventDefault();
         tab.classList.remove('drag-over');
         const src = dragSourceIndex ?? parseInt(e.dataTransfer.getData('text/plain') || '-1', 10);
-        if (!Number.isInteger(src) || src < 0) return;
+        if (!Number.isInteger(src) || src < 0 || src === index) return;
         moveMemo(src, index);
         dragSourceIndex = null;
       });
