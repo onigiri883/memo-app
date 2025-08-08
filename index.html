@@ -72,6 +72,10 @@
     color: #fff;
     font-weight: 500;
   }
+  .tab.drag-over {
+    outline: 2px dashed rgba(0,122,255,.6);
+    outline-offset: 2px;
+  }
   .tab .label {
     max-width: 150px;
     overflow: hidden;
@@ -170,7 +174,7 @@
   <div class="app">
     <div class="header">
       <div class="title">ちょいメモ Web</div>
-      <div style="margin-left:auto; color:#8b9096; font-size:12px">ダブルクリックでタブ名編集／ドラッグで並び替え</div>
+      <div style="margin-left:auto; color:#8b9096; font-size:12px">ダブルタップ/ダブルクリックでタブ名編集／ドラッグで並び替え</div>
     </div>
 
     <div class="tabs" id="tabs"></div>
@@ -326,23 +330,36 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.appendChild(handle);
       tab.appendChild(label);
       tab.appendChild(del);
-      tab.onclick = (e) => {
+      // --- Tap to switch ---
+      tab.addEventListener('click', (e) => {
         if (e.target === handle || e.target.closest('button')) return;
         setSelected(index);
-      };
+      });
 
-      // --- DnD Logic ---
-      tab.addEventListener('dragstart', (e) => {
-        if (e.target !== handle) {
+      // --- Double-tap / Double-click to rename ---
+      let lastTapTime = 0;
+      tab.addEventListener('touchend', (e) => {
+        if (e.target === handle || e.target.closest('button')) return;
+        const now = Date.now();
+        if (now - lastTapTime < 350) {
+          // double tap
           e.preventDefault();
-          return;
+          startEditTitle(tab, index, memo.title);
         }
+        lastTapTime = now;
+      });
+      tab.addEventListener('dblclick', (e) => {
+        if (e.target === handle || e.target.closest('button')) return;
+        startEditTitle(tab, index, memo.title);
+      });
+
+      // --- DnD Logic (drag by handle) ---
+      handle.setAttribute('draggable', 'true');
+      handle.addEventListener('dragstart', (e) => {
         dragSourceIndex = index;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(index));
-        setTimeout(() => tab.classList.add('dragging'), 0);
       });
-      tab.addEventListener('dragend', () => tab.classList.remove('dragging'));
       tab.addEventListener('dragover', (e) => {
         e.preventDefault();
         tab.classList.add('drag-over');
