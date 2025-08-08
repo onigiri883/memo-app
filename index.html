@@ -297,33 +297,35 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.appendChild(label);
       tab.appendChild(del);
 
-      // --- Single Tap to Switch Tab ---
+      // --- Touch: Tap to switch, Double-tap to rename ---
       let lastTapTime = 0;
-      let tapCount = 0;
-      
-      tab.addEventListener('click', (e) => {
-        // Ignore clicks on handle or delete button
+      let touchStartTime = 0;
+      let tapTimerId = null;
+
+      tab.addEventListener('touchstart', (e) => {
         if (e.target === handle || e.target.closest('button')) return;
-        
+        touchStartTime = Date.now();
+      }, { passive: true });
+
+      tab.addEventListener('touchend', (e) => {
+        if (e.target === handle || e.target.closest('button')) return;
         const now = Date.now();
-        if (now - lastTapTime < 350) {
-          tapCount++;
-        } else {
-          tapCount = 1;
-        }
-        lastTapTime = now;
-        
-        if (tapCount === 1) {
-          // Single tap - switch tab (delayed to check for double tap)
-          setTimeout(() => {
-            if (tapCount === 1) {
-              setSelected(index);
-            }
-          }, 350);
-        } else if (tapCount === 2) {
-          // Double tap - edit title
+        const duration = now - touchStartTime;
+        // 長押しは無視（名前変更しない）
+        if (duration >= 450) { lastTapTime = 0; return; }
+
+        if (now - lastTapTime < 300) {
+          // Double tap → rename
+          if (tapTimerId) { clearTimeout(tapTimerId); tapTimerId = null; }
           startEditTitle(tab, index, memo.title);
-          tapCount = 0; // Reset
+          lastTapTime = 0;
+        } else {
+          // Single tap (delay to confirm not double tap)
+          lastTapTime = now;
+          tapTimerId = setTimeout(() => {
+            // If no second tap within 300ms, treat as single tap
+            if (lastTapTime === now) setSelected(index);
+          }, 320);
         }
       });
 
@@ -333,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startEditTitle(tab, index, memo.title);
       });
 
-      // --- Drag & Drop Logic (Handle Only) ---
+      // --- Drag & Drop Logic (Handle Only, Desktop) ---
       handle.addEventListener('dragstart', (e) => {
         dragSourceIndex = index;
         e.dataTransfer.effectAllowed = 'move';
@@ -362,6 +364,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!Number.isInteger(src) || src < 0 || src === index) return;
         moveMemo(src, index);
         dragSourceIndex = null;
+      });
+
+      // --- Touch Drag Reorder (Handle Only, Mobile) ---
+      let touchDragStartIndex = null;
+      let touchDragTargetIndex = null;
+
+      const getTabIndexFromPoint = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        const t = el && el.closest ? el.closest('.tab') : null;
+        if (!t) return null;
+        const children = Array.from(tabsEl.children);
+        const idx = children.indexOf(t);
+        return idx >= 0 ? idx : null;
+      };
+
+      handle.addEventListener('touchstart', (e) => {
+        touchDragStartIndex = index;
+        touchDragTargetIndex = index;
+        tab.classList.add('drag-over');
+        e.preventDefault();
+      }, { passive: false });
+
+      handle.addEventListener('touchmove', (e) => {
+        const t = e.touches[0];
+        const idx = getTabIndexFromPoint(t.clientX, t.clientY);
+        if (idx === null) return;
+        // ハイライト更新
+        Array.from(tabsEl.children).forEach((c, i) => {
+          if (i === idx) c.classList.add('drag-over');
+          else c.classList.remove('drag-over');
+        });
+        touchDragTargetIndex = idx;
+        e.preventDefault();
+      }, { passive: false });
+
+      handle.addEventListener('touchend', (e) => {
+        Array.from(tabsEl.children).forEach((c) => c.classList.remove('drag-over'));
+        if (touchDragStartIndex !== null &&
+            touchDragTargetIndex !== null &&
+            touchDragTargetIndex !== touchDragStartIndex) {
+          moveMemo(touchDragStartIndex, touchDragTargetIndex);
+        }
+        touchDragStartIndex = null;
+        touchDragTargetIndex = null;
+        e.preventDefault();
       });
       
       tabsEl.appendChild(tab);
