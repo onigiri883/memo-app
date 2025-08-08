@@ -77,6 +77,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .tab .drag-handle {
+    cursor: grab;
+    color: var(--muted);
+    margin-right: 8px;
+    touch-action: none; /* Prevent scrolling when dragging the handle */
+  }
   .tab input.title-edit {
     height: 24px;
     font-size: 14px;
@@ -265,6 +271,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.className = 'tab' + (index === state.selectedIndex ? ' active' : '');
       tab.setAttribute('draggable', 'true');
 
+      const handle = document.createElement('span');
+      handle.className = 'drag-handle';
+      handle.innerHTML = '&#9776;'; // Hamburger icon
+      handle.style.cursor = 'grab';
+
       const label = document.createElement('span');
       label.className = 'label';
       label.textContent = memo.title;
@@ -275,8 +286,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let touchMoved = false;
 
       const startPress = (e) => {
-        // Don't trigger on right-click or if a button inside the tab was clicked
-        if (e.type === 'contextmenu' || e.target.closest('button')) {
+        // Don't trigger if handle or button was clicked
+        if (e.target === handle || e.target.closest('button')) {
           return;
         }
         touchMoved = false;
@@ -299,7 +310,6 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.addEventListener('touchstart', startPress, { passive: true });
       tab.addEventListener('touchend', cancelPress);
       tab.addEventListener('touchmove', moved, { passive: true });
-      // For desktop, allow right-click to edit
       tab.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         startEditTitle(tab, index, memo.title);
@@ -308,21 +318,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const del = document.createElement('button');
       del.className = 'icon-btn danger';
-      del.innerHTML = '&#x2715;'; // Use HTML entity for cross
+      del.innerHTML = '&#x2715;';
       del.title = '削除';
       del.onclick = (e) => { e.stopPropagation(); deleteMemo(index); };
       if (state.memos.length <= 1) del.style.visibility = 'hidden';
 
+      tab.appendChild(handle);
       tab.appendChild(label);
       tab.appendChild(del);
-      tab.onclick = () => {
-        // Prevent selection if a button was clicked
-        if (event.target.closest('button')) return;
+      tab.onclick = (e) => {
+        if (e.target === handle || e.target.closest('button')) return;
         setSelected(index);
       };
 
-      // Remove DnD listeners for simplicity on mobile
-      // tab.addEventListener('dragstart', ...);
+      // --- DnD Logic ---
+      tab.addEventListener('dragstart', (e) => {
+        if (e.target !== handle) {
+          e.preventDefault();
+          return;
+        }
+        dragSourceIndex = index;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(index));
+        setTimeout(() => tab.classList.add('dragging'), 0);
+      });
+      tab.addEventListener('dragend', () => tab.classList.remove('dragging'));
+      tab.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        tab.classList.add('drag-over');
+      });
+      tab.addEventListener('dragleave', () => tab.classList.remove('drag-over'));
+      tab.addEventListener('drop', (e) => {
+        e.preventDefault();
+        tab.classList.remove('drag-over');
+        const src = dragSourceIndex ?? parseInt(e.dataTransfer.getData('text/plain') || '-1', 10);
+        if (!Number.isInteger(src) || src < 0) return;
+        moveMemo(src, index);
+        dragSourceIndex = null;
+      });
       
       tabsEl.appendChild(tab);
     });
