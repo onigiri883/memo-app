@@ -49,6 +49,10 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none; /* Firefox */
+    /* Avoid unintended text selection / callout while dragging on mobile */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   .tabs::-webkit-scrollbar {
     display: none; /* Chrome, Safari */
@@ -97,6 +101,12 @@
     width: 120px;
     background: #fff;
   }
+  /* Allow selection inside editing input even if parent disables selection */
+  .tabs input.title-edit {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .tabs.dragging { cursor: grabbing; }
   .icon-btn {
     display: inline-flex;
     align-items: center;
@@ -315,6 +325,9 @@ document.addEventListener('DOMContentLoaded', () => {
         touchStartY = t.clientY;
         touchDragActive = false;
         touchDragStartIndex = index;
+        // prevent 300ms delay and iOS callout
+        tabsEl.classList.add('dragging');
+        e.preventDefault();
       }, { passive: true });
 
       tab.addEventListener('touchmove', (e) => {
@@ -351,12 +364,13 @@ document.addEventListener('DOMContentLoaded', () => {
           touchDragActive = false;
           touchDragStartIndex = null;
           touchDragTargetIndex = null;
+          tabsEl.classList.remove('dragging');
           e.preventDefault();
           return;
         }
 
         // 長押しは無視（名前変更しない）
-        if (duration >= 450) { lastTapTime = 0; return; }
+        if (duration >= 450) { lastTapTime = 0; tabsEl.classList.remove('dragging'); return; }
 
         if (now - lastTapTime < 300) {
           // Double tap → rename
@@ -370,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lastTapTime === now) setSelected(index);
           }, 320);
         }
+        tabsEl.classList.remove('dragging');
       });
 
       // --- Double Click for Desktop ---
