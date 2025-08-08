@@ -273,13 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     state.memos.forEach((memo, index) => {
       const tab = document.createElement('div');
       tab.className = 'tab' + (index === state.selectedIndex ? ' active' : '');
-      // Remove draggable from tab itself
-      
-      const handle = document.createElement('span');
-      handle.className = 'drag-handle';
-      handle.innerHTML = '&#9776;'; // Hamburger icon
-      handle.style.cursor = 'grab';
-      handle.setAttribute('draggable', 'true'); // Only handle is draggable
+      tab.setAttribute('draggable', 'true');
 
       const label = document.createElement('span');
       label.className = 'label';
@@ -293,24 +287,74 @@ document.addEventListener('DOMContentLoaded', () => {
       del.onclick = (e) => { e.stopPropagation(); deleteMemo(index); };
       if (state.memos.length <= 1) del.style.visibility = 'hidden';
 
-      tab.appendChild(handle);
       tab.appendChild(label);
       tab.appendChild(del);
-
-      // --- Touch: Tap to switch, Double-tap to rename ---
+      // --- Touch: Tap (switch) / Double-tap (rename) / Drag (reorder) ---
       let lastTapTime = 0;
       let touchStartTime = 0;
       let tapTimerId = null;
+      let touchStartX = 0, touchStartY = 0;
+      let touchDragActive = false;
+      let touchDragStartIndex = null;
+      let touchDragTargetIndex = null;
+
+      const getTabIndexFromPoint = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        const t = el && el.closest ? el.closest('.tab') : null;
+        if (!t) return null;
+        const children = Array.from(tabsEl.children);
+        const idx = children.indexOf(t);
+        return idx >= 0 ? idx : null;
+      };
 
       tab.addEventListener('touchstart', (e) => {
-        if (e.target === handle || e.target.closest('button')) return;
+        if (e.target.closest('button')) return; // 削除ボタンは除外
         touchStartTime = Date.now();
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+        touchDragActive = false;
+        touchDragStartIndex = index;
       }, { passive: true });
 
+      tab.addEventListener('touchmove', (e) => {
+        if (e.target.closest('button')) return;
+        const t = e.touches[0];
+        const dx = Math.abs(t.clientX - touchStartX);
+        const dy = Math.abs(t.clientY - touchStartY);
+        if (!touchDragActive && (dx > 12 || dy > 12)) {
+          touchDragActive = true;
+        }
+        if (touchDragActive) {
+          const idx = getTabIndexFromPoint(t.clientX, t.clientY);
+          if (idx !== null) {
+            Array.from(tabsEl.children).forEach((c, i) => {
+              if (i === idx) c.classList.add('drag-over');
+              else c.classList.remove('drag-over');
+            });
+            touchDragTargetIndex = idx;
+          }
+          e.preventDefault();
+        }
+      }, { passive: false });
+
       tab.addEventListener('touchend', (e) => {
-        if (e.target === handle || e.target.closest('button')) return;
+        if (e.target.closest('button')) return;
         const now = Date.now();
         const duration = now - touchStartTime;
+
+        if (touchDragActive) {
+          Array.from(tabsEl.children).forEach((c) => c.classList.remove('drag-over'));
+          if (touchDragStartIndex !== null && touchDragTargetIndex !== null && touchDragTargetIndex !== touchDragStartIndex) {
+            moveMemo(touchDragStartIndex, touchDragTargetIndex);
+          }
+          touchDragActive = false;
+          touchDragStartIndex = null;
+          touchDragTargetIndex = null;
+          e.preventDefault();
+          return;
+        }
+
         // 長押しは無視（名前変更しない）
         if (duration >= 450) { lastTapTime = 0; return; }
 
@@ -320,10 +364,9 @@ document.addEventListener('DOMContentLoaded', () => {
           startEditTitle(tab, index, memo.title);
           lastTapTime = 0;
         } else {
-          // Single tap (delay to confirm not double tap)
+          // Single tap → switch (delay)
           lastTapTime = now;
           tapTimerId = setTimeout(() => {
-            // If no second tap within 300ms, treat as single tap
             if (lastTapTime === now) setSelected(index);
           }, 320);
         }
@@ -335,15 +378,14 @@ document.addEventListener('DOMContentLoaded', () => {
         startEditTitle(tab, index, memo.title);
       });
 
-      // --- Drag & Drop Logic (Handle Only, Desktop) ---
-      handle.addEventListener('dragstart', (e) => {
+      // --- Drag & Drop Logic (Desktop, Tab Draggable) ---
+      tab.addEventListener('dragstart', (e) => {
         dragSourceIndex = index;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(index));
         tab.style.opacity = '0.5';
       });
-      
-      handle.addEventListener('dragend', () => {
+      tab.addEventListener('dragend', () => {
         tab.style.opacity = '1';
       });
       
@@ -366,50 +408,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dragSourceIndex = null;
       });
 
-      // --- Touch Drag Reorder (Handle Only, Mobile) ---
-      let touchDragStartIndex = null;
-      let touchDragTargetIndex = null;
-
-      const getTabIndexFromPoint = (x, y) => {
-        const el = document.elementFromPoint(x, y);
-        const t = el && el.closest ? el.closest('.tab') : null;
-        if (!t) return null;
-        const children = Array.from(tabsEl.children);
-        const idx = children.indexOf(t);
-        return idx >= 0 ? idx : null;
-      };
-
-      handle.addEventListener('touchstart', (e) => {
-        touchDragStartIndex = index;
-        touchDragTargetIndex = index;
-        tab.classList.add('drag-over');
-        e.preventDefault();
-      }, { passive: false });
-
-      handle.addEventListener('touchmove', (e) => {
-        const t = e.touches[0];
-        const idx = getTabIndexFromPoint(t.clientX, t.clientY);
-        if (idx === null) return;
-        // ハイライト更新
-        Array.from(tabsEl.children).forEach((c, i) => {
-          if (i === idx) c.classList.add('drag-over');
-          else c.classList.remove('drag-over');
-        });
-        touchDragTargetIndex = idx;
-        e.preventDefault();
-      }, { passive: false });
-
-      handle.addEventListener('touchend', (e) => {
-        Array.from(tabsEl.children).forEach((c) => c.classList.remove('drag-over'));
-        if (touchDragStartIndex !== null &&
-            touchDragTargetIndex !== null &&
-            touchDragTargetIndex !== touchDragStartIndex) {
-          moveMemo(touchDragStartIndex, touchDragTargetIndex);
-        }
-        touchDragStartIndex = null;
-        touchDragTargetIndex = null;
-        e.preventDefault();
-      });
       
       tabsEl.appendChild(tab);
     });
